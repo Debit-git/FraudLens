@@ -180,18 +180,67 @@ def create_customer() -> tuple[Response, int] | Response:
 
 @api_bp.route("/customers/remote", methods=["GET"])
 def list_remote_customers() -> tuple[Response, int]:
-    """Return customers directly from Nessie without local persistence."""
+    """
+    Return customers directly from Nessie without local persistence.
+    ---
+    tags:
+      - api-customers
+    parameters:
+      - in: query
+        name: limit
+        type: integer
+        default: 100
+      - in: query
+        name: offset
+        type: integer
+        default: 0
+      - in: query
+        name: newest_first
+        type: boolean
+        default: false
+    responses:
+      200:
+        description: Nessie customers fetched
+      400:
+        description: Invalid query parameters
+      502:
+        description: Nessie upstream failure
+    """
     limit = request.args.get("limit", default=100, type=int)
+    offset = request.args.get("offset", default=0, type=int)
+    newest_first = request.args.get("newest_first", default="false", type=str).lower()
     if limit < 1 or limit > 500:
         return _json_error("limit must be between 1 and 500.", 400)
+    if offset < 0:
+        return _json_error("offset must be >= 0.", 400)
+    if newest_first not in {"true", "false"}:
+        return _json_error("newest_first must be true or false.", 400)
 
     nessie = current_app.extensions["nessie_service"]
     try:
-        remote_customers = nessie.list_customers(limit=limit)
+        # Fetch a larger window first so offset/newest-first can be applied predictably.
+        remote_customers = nessie.list_customers(limit=500)
     except NessieServiceError as exc:
         return _json_error(str(exc), 502)
 
-    return jsonify({"items": remote_customers, "total": len(remote_customers)}), 200
+    if newest_first == "true":
+        remote_customers = list(reversed(remote_customers))
+
+    total = len(remote_customers)
+    items = remote_customers[offset : offset + limit]
+    return (
+        jsonify(
+            {
+                "items": items,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "newest_first": newest_first == "true",
+                "has_more": (offset + limit) < total,
+            }
+        ),
+        200,
+    )
 
 
 @api_bp.route("/customers/sync", methods=["POST"])

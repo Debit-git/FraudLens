@@ -25,6 +25,14 @@
       <p>{{ metrics.total_tx }}</p>
     </article>
     <article class="stat-card">
+      <h3>Total Fraud Checks</h3>
+      <p>{{ total_fraud_checks }}</p>
+    </article>
+    <article class="stat-card">
+      <h3>High Risk Checks</h3>
+      <p>{{ high_risk_checks }}</p>
+    </article>
+    <article class="stat-card">
       <h3>System Status</h3>
       <p>Operational</p>
     </article>
@@ -33,8 +41,19 @@
   <section class="card">
     <div class="section-title">
       <h3>Customer Registry</h3>
-      <span class="muted">SQLite + Nessie-linked identities</span>
+      <span class="muted">
+        {% if customer_source == "nessie" %}
+          Live Nessie customers (with local links when available)
+        {% else %}
+          Local SQLite customers (Nessie unavailable)
+        {% endif %}
+      </span>
     </div>
+    {% if nessie_error %}
+      <div class="flash flash-error">
+        Nessie fetch failed, showing local data. Details: {{ nessie_error }}
+      </div>
+    {% endif %}
     {% if customer_rows %}
       <div class="table-wrap">
         <table>
@@ -49,10 +68,23 @@
           <tbody>
             {% for row in customer_rows %}
               <tr>
-                <td>{{ row.customer.first_name }} {{ row.customer.last_name }}</td>
-                <td><code>{{ row.customer.id[:10] }}...</code></td>
-                <td><code>{{ (row.customer.nessie_customer_id or "N/A")[:16] }}</code></td>
-                <td>{{ row.tx_count }}</td>
+                {% if customer_source == "nessie" %}
+                  <td>{{ row.first_name }} {{ row.last_name }}</td>
+                  <td>
+                    {% if row.local_id %}
+                      <code>{{ row.local_id[:10] }}...</code>
+                    {% else %}
+                      <span class="muted">not synced</span>
+                    {% endif %}
+                  </td>
+                  <td><code>{{ row.nessie_customer_id[:16] }}</code></td>
+                  <td>{{ row.tx_count }}</td>
+                {% else %}
+                  <td>{{ row.customer.first_name }} {{ row.customer.last_name }}</td>
+                  <td><code>{{ row.customer.id[:10] }}...</code></td>
+                  <td><code>{{ (row.customer.nessie_customer_id or "N/A")[:16] }}</code></td>
+                  <td>{{ row.tx_count }}</td>
+                {% endif %}
               </tr>
             {% endfor %}
           </tbody>
@@ -62,6 +94,52 @@
       <div class="empty-state">
         <h4>No customers yet</h4>
         <p>Create one via <code>POST /api/customers</code> to begin the demo flow.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="section-title">
+      <h3>Recent Fraud Checks (v1 API)</h3>
+      <span class="muted">Live activity from <code>/v1/fraud-checks</code></span>
+    </div>
+    {% if recent_checks %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Check ID</th>
+              <th>Customer ID</th>
+              <th>Status</th>
+              <th>Review</th>
+              <th>Risk</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for check in recent_checks %}
+              <tr>
+                <td><code>{{ check.id[:10] }}...</code></td>
+                <td><code>{{ check.customer_id[:16] }}</code></td>
+                <td><span class="status-pill">{{ check.status }}</span></td>
+                <td><span class="status-pill secondary">{{ check.review_status }}</span></td>
+                <td>
+                  {% if check.risk_level %}
+                    <span class="risk {{ check.risk_level|lower }}">{{ check.risk_level }}</span>
+                  {% else %}
+                    <span class="muted">pending</span>
+                  {% endif %}
+                </td>
+                <td>{{ check.fraud_score if check.fraud_score is not none else "-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h4>No fraud checks yet</h4>
+        <p>Create one via <code>POST /v1/fraud-checks</code> and it will appear here.</p>
       </div>
     {% endif %}
   </section>

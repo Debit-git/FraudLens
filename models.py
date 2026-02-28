@@ -97,6 +97,68 @@ class Transaction(db.Model):
         }
 
 
+class FraudCheck(db.Model):
+    """Represents a first-class fraud-check resource for the v1 API."""
+
+    __tablename__ = "fraud_checks"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    customer_id = db.Column(
+        db.String(36),
+        db.ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    amount = db.Column(db.Float, nullable=False)
+    merchant = db.Column(db.String(255), nullable=False)
+    merchant_category = db.Column(db.String(100), nullable=False)
+    location = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    status = db.Column(db.String(30), nullable=False, default="processing", index=True)
+    review_status = db.Column(db.String(30), nullable=False, default="open", index=True)
+    fraud_score = db.Column(db.Float, nullable=True)
+    risk_level = db.Column(db.String(20), nullable=True, index=True)
+    risk_factors_json = db.Column(db.Text, nullable=False, default="[]")
+    ai_explanation = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    @property
+    def risk_factors(self) -> list[str]:
+        """Return risk factors as parsed list."""
+        return json.loads(self.risk_factors_json or "[]")
+
+    @risk_factors.setter
+    def risk_factors(self, value: list[str]) -> None:
+        """Set risk factors list."""
+        self.risk_factors_json = json.dumps(value or [])
+
+    def to_dict(self) -> dict:
+        """Serialize fraud check model instance."""
+        return {
+            "id": self.id,
+            "customer_id": self.customer_id,
+            "amount": self.amount,
+            "merchant": self.merchant,
+            "merchant_category": self.merchant_category,
+            "location": self.location,
+            "timestamp": self.timestamp.isoformat(),
+            "status": self.status,
+            "review_status": self.review_status,
+            "fraud_score": self.fraud_score,
+            "risk_level": self.risk_level,
+            "risk_factors": self.risk_factors,
+            "ai_explanation": self.ai_explanation,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
 class IdempotencyRecord(db.Model):
     """Stores prior request/response pairs for idempotent POST handling."""
 

@@ -138,6 +138,39 @@ class NessieService:
             )
         return [item for item in normalized if item["nessie_customer_id"]]
 
+    def get_customer(self, nessie_customer_id: str) -> dict | None:
+        """Fetch a single customer from Nessie by id."""
+        if self.mock_mode:
+            return {
+                "nessie_customer_id": nessie_customer_id,
+                "first_name": "Mock",
+                "last_name": "Customer",
+                "address": {},
+            }
+
+        payload = self._get(f"/customers/{nessie_customer_id}")
+        if not isinstance(payload, dict):
+            return None
+        if payload.get("message") == "Customer not found":
+            return None
+
+        address = payload.get("address") or {}
+        resolved_id = payload.get("_id") or payload.get("id")
+        if not resolved_id:
+            return None
+        return {
+            "nessie_customer_id": resolved_id,
+            "first_name": payload.get("first_name", "").strip(),
+            "last_name": payload.get("last_name", "").strip(),
+            "address": {
+                "street_number": address.get("street_number"),
+                "street_name": address.get("street_name"),
+                "city": address.get("city"),
+                "state": address.get("state"),
+                "zip": address.get("zip"),
+            },
+        }
+
     def get_customer_history(self, nessie_customer_id: str) -> list[dict]:
         """
         Fetch and normalize purchase history from Nessie for a customer.

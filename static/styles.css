@@ -95,7 +95,7 @@ body {
 .stats-grid {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.8rem;
 }
 
@@ -361,6 +361,21 @@ th {
 
 .risk-list li {
   margin-bottom: 0.45rem;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: #e7f0fa;
+  color: #244e77;
+  text-transform: lowercase;
+}
+
+.status-pill.secondary {
+  background: #f2f5f9;
+  color: #4b5d73;
 }
 
 .flash {

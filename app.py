@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from flask import Flask, jsonify
+from flasgger import Swagger
 from dotenv import load_dotenv
 
 # Load environment before importing Config so class attributes read correct values.
 load_dotenv(override=True)
 
 from api.routes import api_bp
+from api.v1_routes import v1_bp
 from config import Config
 from models import db
 from services.gemini_service import GeminiService
@@ -20,6 +22,32 @@ def create_app() -> Flask:
     """Application factory for FraudLens."""
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    swagger_template = {
+        "swagger": "2.0",
+        "info": {
+            "title": "FraudLens API",
+            "version": "1.0.0",
+            "description": (
+                "Nessie-enriched fraud detection API with resource-oriented fraud checks."
+            ),
+        },
+    }
+    swagger_config = {
+        "headers": [],
+        "specs": [
+            {
+                "endpoint": "openapi",
+                "route": "/openapi.json",
+                "rule_filter": lambda rule: True,
+                "model_filter": lambda tag: True,
+            }
+        ],
+        "static_url_path": "/flasgger_static",
+        "swagger_ui": True,
+        "specs_route": "/docs/",
+    }
+    Swagger(app, template=swagger_template, config=swagger_config)
 
     db.init_app(app)
 
@@ -36,6 +64,7 @@ def create_app() -> Flask:
     )
 
     app.register_blueprint(api_bp)
+    app.register_blueprint(v1_bp)
     app.register_blueprint(web_bp)
 
     @app.errorhandler(404)

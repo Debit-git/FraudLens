@@ -16,14 +16,19 @@
     </article>
 
     <article class="card">
+      {% if nessie_error %}
+        <div class="flash flash-error">
+          Nessie customer fetch failed; showing local fallback list. Details: {{ nessie_error }}
+        </div>
+      {% endif %}
       <form method="post" class="form-grid">
         <label>
           Customer
           <select name="customer_id" required>
             <option value="">Select a customer</option>
-            {% for customer in customers %}
+            {% for customer in customer_options %}
               <option value="{{ customer.id }}">
-                {{ customer.first_name }} {{ customer.last_name }} ({{ customer.id[:8] }})
+                {{ customer.display }} ({{ customer.source }})
               </option>
             {% endfor %}
           </select>

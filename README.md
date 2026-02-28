@@ -7,6 +7,37 @@ FraudLens is a production-style Flask web API and dashboard that simulates trans
 
 It is designed for a hackathon API submission with clean modular structure and REST-first endpoint design.
 
+## 60-Second First Call
+
+1) Start the server:
+
+```bash
+python app.py
+```
+
+2) Create a customer:
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/customers \
+  -H "Content-Type: application/json" \
+  -d "{\"first_name\":\"Ava\",\"last_name\":\"Shaw\"}"
+```
+
+3) Create a v1 fraud check (replace `<CUSTOMER_ID>`):
+
+```bash
+curl -X POST http://127.0.0.1:5000/v1/fraud-checks \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: quickstart-001" \
+  -d "{\"customer_id\":\"<CUSTOMER_ID>\",\"amount\":950,\"merchant\":\"Best Buy\",\"location\":\"New York\",\"timestamp\":\"2026-04-04T02:14:00Z\"}"
+```
+
+You will receive a `201 Created` response with a persisted `fraud_check` resource.
+
+Interactive docs:
+- Swagger UI: `http://127.0.0.1:5000/docs/`
+- OpenAPI JSON: `http://127.0.0.1:5000/openapi.json`
+
 ## Project Structure
 
 ```text
@@ -169,14 +200,18 @@ Returns `404` if transaction is not found.
 
 ### 4) List Customers from Nessie (Remote Only)
 
-`GET /api/customers/remote?limit=100`
+`GET /api/customers/remote?limit=100&offset=0&newest_first=true`
 
 Success response (`200`):
 
 ```json
 {
   "items": [],
-  "total": 0
+  "total": 0,
+  "limit": 100,
+  "offset": 0,
+  "newest_first": true,
+  "has_more": false
 }
 ```
 
@@ -276,7 +311,7 @@ curl http://127.0.0.1:5000/api/fraud-score/<TRANSACTION_ID>
 ### List Nessie Customers
 
 ```bash
-curl "http://127.0.0.1:5000/api/customers/remote?limit=50"
+curl "http://127.0.0.1:5000/api/customers/remote?limit=5&offset=0&newest_first=true"
 ```
 
 ### Sync Nessie Customers to Local
@@ -322,4 +357,119 @@ Risk levels:
 - `409` idempotency conflict
 - `500` internal server error
 - `502` upstream API failure
+
+## v1 Fraud Checks API (Resource-Oriented Surface)
+
+Base path: `/v1`
+
+`/v1/fraud-checks` is Nessie-first:
+- Customer identity is resolved against Nessie.
+- Baselining uses Nessie purchase history plus prior local fraud checks.
+- Local DB stores fraud-check lifecycle state and idempotency records.
+
+### Create Fraud Check
+
+`POST /v1/fraud-checks`
+
+```json
+{
+  "customer_id": "local-customer-id",
+  "amount": 950,
+  "merchant": "Best Buy",
+  "location": "New York",
+  "timestamp": "2026-04-04T02:14:00Z"
+}
+```
+
+`customer_id` can be either:
+- local FraudLens customer UUID, or
+- Nessie customer ID (`nessie_customer_id`)
+
+Response: `201 Created`
+
+### Retrieve Fraud Check
+
+`GET /v1/fraud-checks/<fraud_check_id>`
+
+Response: `200 OK`
+
+### List Fraud Checks
+
+`GET /v1/fraud-checks?customer_id=<id>&status=completed&risk_level=HIGH&page=1&per_page=10`
+
+Response: `200 OK`
+
+### Update Review State
+
+`PATCH /v1/fraud-checks/<fraud_check_id>`
+
+```json
+{
+  "review_status": "confirmed_fraud"
+}
+```
+
+Response: `200 OK`
+
+### Delete Fraud Check
+
+`DELETE /v1/fraud-checks/<fraud_check_id>`
+
+Response: `204 No Content`
+
+## Structured Error Format
+
+All v1 errors follow this body:
+
+```json
+{
+  "error": {
+    "type": "invalid_request",
+    "message": "amount must be greater than zero."
+  }
+}
+```
+
+Semantics:
+- `400 Bad Request` for malformed JSON body.
+- `422 Unprocessable Entity` for semantically invalid input.
+- `404 Not Found` for missing resources.
+- `409 Conflict` for idempotency-key payload mismatches.
+
+## v1 cURL Examples
+
+### POST /v1/fraud-checks
+
+```bash
+curl -X POST http://127.0.0.1:5000/v1/fraud-checks \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: fc-001" \
+  -d "{\"customer_id\":\"<CUSTOMER_ID>\",\"amount\":1200,\"merchant\":\"Apple\",\"location\":\"Chicago\",\"timestamp\":\"2026-05-01T01:20:00Z\"}"
+```
+
+### GET /v1/fraud-checks/:id
+
+```bash
+curl http://127.0.0.1:5000/v1/fraud-checks/<FRAUD_CHECK_ID>
+```
+
+### GET /v1/fraud-checks
+
+```bash
+curl "http://127.0.0.1:5000/v1/fraud-checks?risk_level=HIGH&page=1&per_page=10"
+```
+
+### PATCH /v1/fraud-checks/:id
+
+```bash
+curl -X PATCH http://127.0.0.1:5000/v1/fraud-checks/<FRAUD_CHECK_ID> \
+  -H "Content-Type: application/json" \
+  -d "{\"review_status\":\"dismissed\"}"
+```
+
+### DELETE /v1/fraud-checks/:id
+
+```bash
+curl -X DELETE http://127.0.0.1:5000/v1/fraud-checks/<FRAUD_CHECK_ID>
+```
 
