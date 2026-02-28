@@ -4,15 +4,40 @@
     <article class="card helper-card">
       <h2>Simulate Fraud Scenario</h2>
       <p>
-        Submit a transaction profile and let FraudLens calculate a risk score from
-        rule-based anomalies.
+        Build realistic scenarios against each customer's baseline from Nessie + local history.
       </p>
       <ul class="helper-list">
-        <li>High amount vs baseline</li>
-        <li>Overnight activity (12am-4am)</li>
-        <li>Location jumps</li>
-        <li>Merchant category shifts</li>
+        <li>Customer-aware risk scoring with Nessie purchase baseline</li>
+        <li>Quick presets for "normal" and "suspicious" behavior</li>
+        <li>Explainable risk factors and Gemini narrative on result page</li>
+        <li>Useful for demoing fraud operations workflows</li>
       </ul>
+      <div id="profile-box" class="profile-box hidden">
+        <h3>Customer Behavior Snapshot</h3>
+        <p class="muted" id="profile-meta">Select a customer to load baseline metrics.</p>
+        <div class="profile-grid">
+          <div>
+            <span class="meta-label">History Count</span>
+            <p id="profile-history">-</p>
+          </div>
+          <div>
+            <span class="meta-label">Average Amount</span>
+            <p id="profile-avg">-</p>
+          </div>
+          <div>
+            <span class="meta-label">Top Merchant</span>
+            <p id="profile-merchant">-</p>
+          </div>
+          <div>
+            <span class="meta-label">Top Location</span>
+            <p id="profile-location">-</p>
+          </div>
+        </div>
+        <div class="preset-actions">
+          <button type="button" id="preset-normal" class="btn-secondary">Use Normal Preset</button>
+          <button type="button" id="preset-suspicious" class="btn-secondary">Use Suspicious Preset</button>
+        </div>
+      </div>
     </article>
 
     <article class="card">
@@ -58,5 +83,69 @@
       </form>
     </article>
   </section>
+
+  <script>
+    (function () {
+      const customerSelect = document.querySelector("select[name='customer_id']");
+      const amountInput = document.querySelector("input[name='amount']");
+      const merchantInput = document.querySelector("input[name='merchant']");
+      const locationInput = document.querySelector("input[name='location']");
+      const timestampInput = document.querySelector("input[name='timestamp']");
+
+      const profileBox = document.getElementById("profile-box");
+      const profileMeta = document.getElementById("profile-meta");
+      const profileHistory = document.getElementById("profile-history");
+      const profileAvg = document.getElementById("profile-avg");
+      const profileMerchant = document.getElementById("profile-merchant");
+      const profileLocation = document.getElementById("profile-location");
+      const btnNormal = document.getElementById("preset-normal");
+      const btnSuspicious = document.getElementById("preset-suspicious");
+
+      let presets = null;
+
+      function applyPreset(kind) {
+        if (!presets || !presets[kind]) return;
+        amountInput.value = presets[kind].amount;
+        merchantInput.value = presets[kind].merchant;
+        locationInput.value = presets[kind].location;
+        timestampInput.value = presets[kind].timestamp;
+      }
+
+      async function loadProfile(customerId) {
+        if (!customerId) {
+          profileBox.classList.add("hidden");
+          presets = null;
+          return;
+        }
+        profileBox.classList.remove("hidden");
+        profileMeta.textContent = "Loading customer baseline...";
+        try {
+          const res = await fetch(`/simulate/customer-profile?customer_id=${encodeURIComponent(customerId)}`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Unable to fetch profile");
+
+          profileMeta.textContent = data.nessie_history_available
+            ? "Nessie baseline loaded successfully."
+            : "Using available local baseline (Nessie unavailable).";
+          profileHistory.textContent = String(data.history_count ?? "-");
+          profileAvg.textContent = data.avg_amount != null ? `$${Number(data.avg_amount).toFixed(2)}` : "-";
+          profileMerchant.textContent = data.top_merchant || "-";
+          profileLocation.textContent = data.top_location || "-";
+          presets = data.scenario_presets || null;
+        } catch (err) {
+          profileMeta.textContent = "Unable to load profile for selected customer.";
+          profileHistory.textContent = "-";
+          profileAvg.textContent = "-";
+          profileMerchant.textContent = "-";
+          profileLocation.textContent = "-";
+          presets = null;
+        }
+      }
+
+      customerSelect.addEventListener("change", () => loadProfile(customerSelect.value));
+      btnNormal.addEventListener("click", () => applyPreset("normal"));
+      btnSuspicious.addEventListener("click", () => applyPreset("suspicious"));
+    })();
+  </script>
 {% endblock %}
 

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import random
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from flask import Blueprint, Response, current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
@@ -149,7 +148,43 @@ def _combined_customer_history(
 
 @api_bp.route("/customers", methods=["POST"])
 def create_customer() -> tuple[Response, int] | Response:
-    """Create customer in Nessie and local SQLite database."""
+    """
+    Create customer in Nessie and local SQLite database.
+    ---
+    tags:
+      - api-customers
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: header
+        name: Idempotency-Key
+        type: string
+        required: false
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            first_name:
+              type: string
+            last_name:
+              type: string
+          example:
+            first_name: "John"
+            last_name: "Doe"
+    responses:
+      201:
+        description: Customer created
+      400:
+        description: Validation error
+      409:
+        description: Idempotency conflict
+      502:
+        description: Nessie upstream failure
+    """
     payload = request.get_json(silent=True) or {}
     idem = _get_idempotent_response("/api/customers", payload)
     if idem:
@@ -252,6 +287,37 @@ def sync_remote_customers() -> tuple[Response, int]:
     Matching strategy:
       1) existing `nessie_customer_id`
       2) fallback name pair for older local rows without Nessie linkage
+    ---
+    tags:
+      - api-customers
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: header
+        name: Idempotency-Key
+        type: string
+        required: false
+      - in: body
+        name: body
+        required: false
+        schema:
+          type: object
+          properties:
+            limit:
+              type: integer
+          example:
+            limit: 100
+    responses:
+      200:
+        description: Sync complete
+      400:
+        description: Invalid request payload
+      409:
+        description: Idempotency conflict
+      502:
+        description: Nessie upstream failure
     """
     payload = request.get_json(silent=True) or {}
     idem = _get_idempotent_response("/api/customers/sync", payload)
@@ -330,187 +396,55 @@ def sync_remote_customers() -> tuple[Response, int]:
     return jsonify(response_body), 200
 
 
-@api_bp.route("/nessie/seed-demo-data", methods=["POST"])
-def seed_nessie_demo_data() -> tuple[Response, int] | Response:
-    """
-    Create demo customers/accounts/purchases in Nessie for testing.
-
-    Body (optional):
-      {
-        "customers": 3,
-        "purchases_per_customer": 5,
-        "create_local_links": true
-      }
-    """
-    payload = request.get_json(silent=True) or {}
-    idem = _get_idempotent_response("/api/nessie/seed-demo-data", payload)
-    if idem:
-        return idem
-
-    customers_count = payload.get("customers", 3)
-    purchases_per_customer = payload.get("purchases_per_customer", 5)
-    create_local_links = bool(payload.get("create_local_links", True))
-    try:
-        customers_count = int(customers_count)
-        purchases_per_customer = int(purchases_per_customer)
-    except (TypeError, ValueError):
-        return _json_error("customers and purchases_per_customer must be integers.", 400)
-    if customers_count < 1 or customers_count > 25:
-        return _json_error("customers must be between 1 and 25.", 400)
-    if purchases_per_customer < 1 or purchases_per_customer > 40:
-        return _json_error("purchases_per_customer must be between 1 and 40.", 400)
-
-    nessie = current_app.extensions["nessie_service"]
-    if getattr(nessie, "mock_mode", False):
-        return _json_error("Disable NESSIE_MOCK_MODE to seed live Nessie data.", 400)
-
-    first_names = [
-        "Ava",
-        "Noah",
-        "Mia",
-        "Liam",
-        "Ethan",
-        "Sophia",
-        "Aria",
-        "Mason",
-        "Isabella",
-        "Lucas",
-        "Amelia",
-        "Elijah",
-    ]
-    last_names = [
-        "Patel",
-        "Johnson",
-        "Kim",
-        "Garcia",
-        "Nguyen",
-        "Lee",
-        "Martinez",
-        "Brown",
-        "Walker",
-        "Singh",
-        "Davis",
-        "Khan",
-    ]
-    streets = [
-        "Oak St",
-        "Maple Ave",
-        "Cedar Rd",
-        "Park Blvd",
-        "Riverside Dr",
-        "Lakeview Ave",
-    ]
-    city_state_zip = [
-        ("Chicago", "IL", "60601"),
-        ("Austin", "TX", "78701"),
-        ("Seattle", "WA", "98101"),
-        ("Boston", "MA", "02108"),
-        ("Denver", "CO", "80202"),
-        ("San Jose", "CA", "95113"),
-    ]
-    merchant_profiles = [
-        ("Walmart", 25, 180),
-        ("Target", 20, 160),
-        ("Amazon", 15, 140),
-        ("Uber", 8, 45),
-        ("Shell", 18, 75),
-        ("Best Buy", 120, 650),
-        ("Apple", 80, 1200),
-        ("Costco", 40, 260),
-        ("Starbucks", 4, 28),
-        ("Netflix", 14, 24),
-    ]
-
-    seeded_customers: list[dict] = []
-    accounts_created = 0
-    purchases_created = 0
-    try:
-        for idx in range(customers_count):
-            first_name = random.choice(first_names)
-            last_name = random.choice(last_names)
-            city, state, zip_code = random.choice(city_state_zip)
-            street_number = str(random.randint(100, 9999))
-            street_name = random.choice(streets)
-            address = {
-                "street_number": street_number,
-                "street_name": street_name,
-                "city": city,
-                "state": state,
-                "zip": zip_code,
-            }
-
-            remote_customer = nessie.create_customer(
-                first_name=first_name,
-                last_name=last_name,
-                address=address,
-            )
-            seeded_customers.append(
-                {
-                    "first_name": first_name,
-                    "last_name": last_name,
-                    "nessie_customer_id": remote_customer.customer_id,
-                }
-            )
-
-            account = nessie.create_account_for_customer(
-                nessie_customer_id=remote_customer.customer_id,
-                nickname=f"{first_name} {last_name} Checking",
-                balance=10000 + (idx * 1000),
-            )
-            account_id = account.get("_id")
-            accounts_created += 1
-
-            if create_local_links:
-                existing_local = Customer.query.filter_by(
-                    nessie_customer_id=remote_customer.customer_id
-                ).first()
-                if not existing_local:
-                    db.session.add(
-                        Customer(
-                            first_name=first_name,
-                            last_name=last_name,
-                            nessie_customer_id=remote_customer.customer_id,
-                        )
-                    )
-
-            # Assign each customer a stable spending profile for realistic behavior.
-            preferred_merchants = random.sample(merchant_profiles, k=min(4, len(merchant_profiles)))
-            for purchase_idx in range(purchases_per_customer):
-                days_ago = random.randint(1, 75)
-                purchase_date = (
-                    datetime.now(timezone.utc) - timedelta(days=days_ago)
-                ).date().isoformat()
-                merchant, low, high = random.choice(preferred_merchants)
-                amount = round(random.uniform(low, high), 2)
-                if account_id:
-                    nessie.create_purchase_for_account(
-                        account_id=account_id,
-                        amount=amount,
-                        description=merchant,
-                        purchase_date=purchase_date,
-                    )
-                    purchases_created += 1
-    except NessieServiceError as exc:
-        db.session.rollback()
-        return _json_error(str(exc), 502)
-
-    if create_local_links:
-        db.session.commit()
-
-    response_body = {
-        "seeded_customers": seeded_customers,
-        "customers_created": len(seeded_customers),
-        "accounts_created": accounts_created,
-        "purchases_created": purchases_created,
-        "create_local_links": create_local_links,
-    }
-    _store_idempotent_response("/api/nessie/seed-demo-data", payload, response_body, 201)
-    return jsonify(response_body), 201
-
-
 @api_bp.route("/transactions", methods=["POST"])
 def create_transaction() -> tuple[Response, int] | Response:
-    """Create and score a transaction, then persist it."""
+    """
+    Create and score a transaction, then persist it.
+    ---
+    tags:
+      - api-transactions
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: header
+        name: Idempotency-Key
+        type: string
+        required: false
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          properties:
+            customer_id:
+              type: string
+            amount:
+              type: number
+            merchant:
+              type: string
+            location:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+          example:
+            customer_id: "4d166372-ae6a-4bc6-be77-0de5dc7b5d4c"
+            amount: 950
+            merchant: "Best Buy"
+            location: "Chicago"
+            timestamp: "2026-04-04T02:14:00Z"
+    responses:
+      201:
+        description: Transaction created and scored
+      400:
+        description: Validation error
+      404:
+        description: Customer not found
+      409:
+        description: Idempotency conflict
+    """
     payload = request.get_json(silent=True) or {}
     idem = _get_idempotent_response("/api/transactions", payload)
     if idem:
@@ -578,7 +512,31 @@ def create_transaction() -> tuple[Response, int] | Response:
 
 @api_bp.route("/transactions", methods=["GET"])
 def list_transactions() -> tuple[Response, int]:
-    """List transactions with pagination support."""
+    """
+    List transactions with pagination support.
+    ---
+    tags:
+      - api-transactions
+    produces:
+      - application/json
+    parameters:
+      - in: query
+        name: page
+        type: integer
+        default: 1
+      - in: query
+        name: per_page
+        type: integer
+        default: 10
+      - in: query
+        name: customer_id
+        type: string
+    responses:
+      200:
+        description: Paginated transactions
+      400:
+        description: Invalid pagination parameters
+    """
     page = request.args.get("page", default=1, type=int)
     per_page = request.args.get(
         "per_page",
@@ -618,7 +576,24 @@ def list_transactions() -> tuple[Response, int]:
 
 @api_bp.route("/fraud-score/<transaction_id>", methods=["GET"])
 def get_fraud_score(transaction_id: str) -> tuple[Response, int]:
-    """Recompute fraud score and enrich output with Gemini explanation."""
+    """
+    Recompute fraud score and enrich output with Gemini explanation.
+    ---
+    tags:
+      - api-transactions
+    produces:
+      - application/json
+    parameters:
+      - in: path
+        name: transaction_id
+        required: true
+        type: string
+    responses:
+      200:
+        description: Fraud score and AI explanation
+      404:
+        description: Transaction or linked customer not found
+    """
     transaction = Transaction.query.get(transaction_id)
     if not transaction:
         return _json_error("transaction not found.", 404)
@@ -678,7 +653,24 @@ def get_fraud_score(transaction_id: str) -> tuple[Response, int]:
 
 @api_bp.route("/customers/<customer_id>/history", methods=["GET"])
 def customer_history(customer_id: str) -> tuple[Response, int]:
-    """Expose merged local + Nessie transaction baseline history."""
+    """
+    Expose merged local + Nessie transaction baseline history.
+    ---
+    tags:
+      - api-customers
+    produces:
+      - application/json
+    parameters:
+      - in: path
+        name: customer_id
+        required: true
+        type: string
+    responses:
+      200:
+        description: Customer baseline history
+      404:
+        description: Customer not found
+    """
     customer = Customer.query.get(customer_id)
     if not customer:
         return _json_error("customer not found.", 404)

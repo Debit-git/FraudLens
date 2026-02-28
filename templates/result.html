@@ -10,6 +10,10 @@
       <div class="score">{{ (transaction.fraud_score * 100)|round(1) }}%</div>
       <div>
         <div class="risk {{ transaction.risk_level|lower }}">{{ transaction.risk_level }} RISK</div>
+        <p class="decision-line">
+          Recommended Action:
+          <span class="decision decision-{{ decision|lower }}">{{ decision }}</span>
+        </p>
         <progress
           class="meter-progress"
           max="100"

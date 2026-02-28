@@ -113,6 +113,10 @@ def _history_for_customer(nessie_customer_id: str) -> list[dict]:
         nessie_history = nessie.get_customer_history(nessie_customer_id)
     except NessieServiceError:
         nessie_history = []
+    for item in nessie_history:
+        merchant = item.get("merchant")
+        if merchant:
+            item["merchant_category"] = categorize_merchant(merchant)
     nessie_history.sort(key=lambda item: item.get("timestamp", ""))
     return nessie_history
 
@@ -285,6 +289,165 @@ def create_fraud_check() -> tuple[Response, int] | Response:
 
     response_body = {"fraud_check": fraud_check.to_dict()}
     _store_idempotent_response("/v1/fraud-checks", payload, response_body, 201)
+    return jsonify(response_body), 201
+
+
+@v1_bp.route("/fraud-checks/from-nessie-purchase", methods=["POST"])
+def create_fraud_check_from_nessie_purchase() -> tuple[Response, int] | Response:
+    """
+    Score an already-completed Nessie purchase and persist as a fraud-check resource.
+    ---
+    tags:
+      - v1-fraud-checks
+    consumes:
+      - application/json
+    produces:
+      - application/json
+    parameters:
+      - in: header
+        name: Idempotency-Key
+        type: string
+        required: false
+      - in: body
+        name: body
+        required: false
+        description: Existing Nessie purchase reference.
+        schema:
+          type: object
+          properties:
+            customer_id:
+              type: string
+            purchase_id:
+              type: string
+            location:
+              type: string
+          example:
+            customer_id: "69a29b7e95150878eaffa4ea"
+            purchase_id: "69a3439095150878eaffa579"
+            location: "Chicago"
+    responses:
+      201:
+        description: Fraud check created from existing Nessie purchase
+      400:
+        description: Malformed JSON
+      404:
+        description: Customer or purchase not found
+      409:
+        description: Idempotency conflict
+      422:
+        description: Validation error
+      502:
+        description: Upstream dependency failure
+    """
+    try:
+        payload = _parse_json_body()
+    except ValueError as exc:
+        if str(exc) == "malformed_json":
+            return _error("malformed_json", "Request body must contain valid JSON.", 400)
+        return _error("invalid_request", "Request body must be a JSON object.", 400)
+
+    idem = _load_idempotent_response("/v1/fraud-checks/from-nessie-purchase", payload)
+    if idem:
+        return idem
+
+    customer_id = (payload.get("customer_id") or "").strip()
+    purchase_id = (payload.get("purchase_id") or "").strip()
+    fallback_location = (payload.get("location") or "nessie-unknown").strip()
+    if not customer_id or not purchase_id:
+        return _error(
+            "invalid_request",
+            "customer_id and purchase_id are required.",
+            422,
+        )
+
+    nessie = current_app.extensions["nessie_service"]
+    nessie_customer_id = customer_id
+    local_customer = Customer.query.get(customer_id)
+    if local_customer and local_customer.nessie_customer_id:
+        nessie_customer_id = local_customer.nessie_customer_id
+    try:
+        remote_customer = nessie.get_customer(nessie_customer_id)
+    except NessieServiceError as exc:
+        return _error("upstream_error", str(exc), 502)
+    if not remote_customer:
+        return _error("not_found", "customer not found in Nessie.", 404)
+
+    full_history = _history_for_customer(nessie_customer_id)
+    target_purchase = next((item for item in full_history if item.get("id") == purchase_id), None)
+    if not target_purchase:
+        return _error("not_found", "purchase not found for customer in Nessie.", 404)
+
+    merchant = (target_purchase.get("merchant") or "Nessie Merchant").strip()
+    merchant_category = categorize_merchant(merchant)
+    location = (target_purchase.get("location") or fallback_location).strip() or "nessie-unknown"
+    amount = float(target_purchase.get("amount", 0) or 0)
+    if amount <= 0:
+        return _error("invalid_request", "purchase amount must be greater than zero.", 422)
+    try:
+        timestamp = _parse_iso_timestamp(target_purchase.get("timestamp") or "")
+    except (TypeError, ValueError):
+        return _error("invalid_request", "purchase timestamp is invalid.", 422)
+
+    baseline_history = [item for item in full_history if item.get("id") != purchase_id]
+    analysis = score_transaction(
+        amount=amount,
+        location=location,
+        timestamp=timestamp,
+        merchant_category=merchant_category,
+        history=baseline_history,
+    )
+
+    fraud_check = FraudCheck(
+        customer_id=nessie_customer_id,
+        amount=amount,
+        merchant=merchant,
+        merchant_category=merchant_category,
+        location=location,
+        timestamp=timestamp,
+        status="completed",
+        review_status="open",
+        fraud_score=analysis.fraud_score,
+        risk_level=analysis.risk_level,
+    )
+    fraud_check.risk_factors = analysis.risk_factors
+
+    gemini = current_app.extensions["gemini_service"]
+    explain_payload = {
+        "fraud_check_type": "historical_completed_purchase",
+        "nessie_purchase_id": purchase_id,
+        "customer": remote_customer,
+        "transaction": {
+            "amount": amount,
+            "merchant": merchant,
+            "location": location,
+            "timestamp": timestamp.isoformat(),
+            "merchant_category": merchant_category,
+            "source": "nessie",
+        },
+        "history_sample_size": len(baseline_history),
+        "rule_factors": analysis.debug_factors,
+    }
+    try:
+        fraud_check.ai_explanation = gemini.generate_explanation(explain_payload)
+    except GeminiServiceError:
+        fraud_check.ai_explanation = (
+            "AI explanation is temporarily unavailable. "
+            "Use risk_factors for deterministic explanation."
+        )
+
+    db.session.add(fraud_check)
+    db.session.commit()
+
+    response_body = {
+        "fraud_check": fraud_check.to_dict(),
+        "nessie_purchase_id": purchase_id,
+    }
+    _store_idempotent_response(
+        "/v1/fraud-checks/from-nessie-purchase",
+        payload,
+        response_body,
+        201,
+    )
     return jsonify(response_body), 201
 
 

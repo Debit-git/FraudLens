@@ -239,32 +239,7 @@ Success response (`200`):
 }
 ```
 
-### 6) Seed Demo Data in Nessie
-
-`POST /api/nessie/seed-demo-data`
-
-Request body (optional):
-
-```json
-{
-  "customers": 3,
-  "purchases_per_customer": 5,
-  "create_local_links": true
-}
-```
-
-Success response (`201`):
-
-```json
-{
-  "customers_created": 3,
-  "accounts_created": 3,
-  "purchases_created": 15,
-  "seeded_customers": []
-}
-```
-
-### 7) Get Customer Baseline History (Local + Nessie)
+### 6) Get Customer Baseline History (Local + Nessie)
 
 `GET /api/customers/<customer_id>/history`
 
@@ -280,7 +255,7 @@ Success response (`200`):
 }
 ```
 
-### 8) List Transactions (Pagination)
+### 7) List Transactions (Pagination)
 
 `GET /api/transactions?page=1&per_page=10`
 
@@ -346,15 +321,6 @@ curl -X POST http://127.0.0.1:5000/api/customers/sync \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: sync-001" \
   -d "{\"limit\":100}"
-```
-
-### Seed Nessie Demo Data
-
-```bash
-curl -X POST http://127.0.0.1:5000/api/nessie/seed-demo-data \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: seed-001" \
-  -d "{\"customers\":3,\"purchases_per_customer\":5,\"create_local_links\":true}"
 ```
 
 ### Get Customer Baseline History
@@ -485,6 +451,17 @@ curl -X POST http://127.0.0.1:5000/v1/fraud-checks \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: fc-001" \
   -d "{\"customer_id\":\"<CUSTOMER_ID>\",\"amount\":1200,\"merchant\":\"Apple\",\"location\":\"Chicago\",\"timestamp\":\"2026-05-01T01:20:00Z\"}"
+```
+
+### POST /v1/fraud-checks/from-nessie-purchase
+
+Use this when the transaction already happened in Nessie and you want a retrospective fraud decision plus AI explanation.
+
+```bash
+curl -X POST http://127.0.0.1:5000/v1/fraud-checks/from-nessie-purchase \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: fc-history-001" \
+  -d "{\"customer_id\":\"<NESSIE_CUSTOMER_ID_OR_LOCAL_ID>\",\"purchase_id\":\"<NESSIE_PURCHASE_ID>\",\"location\":\"Chicago\"}"
 ```
 
 ### GET /v1/fraud-checks/:id

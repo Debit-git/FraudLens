@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="card">
+    <div class="section-title">
+      <h2>Fraud Check Detail</h2>
+      <a class="btn-secondary" href="{{ url_for('web.home') }}">Back to Dashboard</a>
+    </div>
+
+    <div class="score-panel">
+      <div class="score">
+        {% if fraud_check.fraud_score is not none %}
+          {{ (fraud_check.fraud_score * 100)|round(1) }}%
+        {% else %}
+          -
+        {% endif %}
+      </div>
+      <div>
+        {% if fraud_check.risk_level %}
+          <div class="risk {{ fraud_check.risk_level|lower }}">{{ fraud_check.risk_level }} RISK</div>
+        {% else %}
+          <div class="risk low">PENDING</div>
+        {% endif %}
+        <p class="decision-line">
+          Recommended Action:
+          <span class="decision decision-{{ decision|lower }}">{{ decision }}</span>
+        </p>
+        {% if fraud_check.fraud_score is not none %}
+          <progress
+            class="meter-progress"
+            max="100"
+            value="{{ (fraud_check.fraud_score * 100)|round(1) }}"
+          ></progress>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="meta-grid">
+      <div>
+        <span class="meta-label">Fraud Check ID</span>
+        <code>{{ fraud_check.id }}</code>
+      </div>
+      <div>
+        <span class="meta-label">Customer</span>
+        <p>
+          {% if customer %}
+            {{ customer.first_name }} {{ customer.last_name }}
+          {% else %}
+            {{ fraud_check.customer_id }}
+          {% endif %}
+        </p>
+      </div>
+      <div>
+        <span class="meta-label">Merchant</span>
+        <p>{{ fraud_check.merchant }}</p>
+      </div>
+      <div>
+        <span class="meta-label">Location</span>
+        <p>{{ fraud_check.location }}</p>
+      </div>
+      <div>
+        <span class="meta-label">Amount</span>
+        <p>${{ "%.2f"|format(fraud_check.amount) }}</p>
+      </div>
+      <div>
+        <span class="meta-label">Timestamp</span>
+        <p>{{ fraud_check.timestamp.isoformat() }}</p>
+      </div>
+    </div>
+
+    <h3>Risk Factors</h3>
+    <ul class="risk-list">
+      {% for factor in risk_factors %}
+        <li>{{ factor }}</li>
+      {% endfor %}
+    </ul>
+
+    <h3>AI Narrative</h3>
+    <p>{{ ai_explanation }}</p>
+  </section>
+{% endblock %}
+

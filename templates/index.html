@@ -119,7 +119,11 @@
           <tbody>
             {% for check in recent_checks %}
               <tr>
-                <td><code>{{ check.id[:10] }}...</code></td>
+                <td>
+                  <a href="{{ url_for('web.fraud_check_result', fraud_check_id=check.id) }}" class="table-link">
+                    <code>{{ check.id[:10] }}...</code>
+                  </a>
+                </td>
                 <td><code>{{ check.customer_id[:16] }}</code></td>
                 <td><span class="status-pill">{{ check.status }}</span></td>
                 <td><span class="status-pill secondary">{{ check.review_status }}</span></td>

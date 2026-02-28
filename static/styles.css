@@ -169,6 +169,15 @@ th {
   letter-spacing: 0.04em;
 }
 
+.table-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.table-link:hover {
+  text-decoration: underline;
+}
+
 .empty-state {
   border: 1px dashed #c6d6e8;
   border-radius: 10px;
@@ -205,6 +214,40 @@ th {
 
 .helper-list li {
   margin-bottom: 0.45rem;
+}
+
+.profile-box {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem;
+  background: #f8fbff;
+}
+
+.profile-box.hidden {
+  display: none;
+}
+
+.profile-box h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.profile-grid p {
+  margin: 0;
+}
+
+.preset-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 }
 
 .form-grid {
@@ -330,6 +373,35 @@ th {
 .meter-progress::-moz-progress-bar {
   background: linear-gradient(90deg, #1ba56e, #e2a31b, #d63f54);
   border-radius: 999px;
+}
+
+.decision-line {
+  margin: 0.5rem 0 0.2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.decision {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.2rem 0.48rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.decision-allow {
+  background: var(--success);
+}
+
+.decision-review {
+  background: var(--warning);
+}
+
+.decision-decline {
+  background: var(--danger);
 }
 
 .risk {
