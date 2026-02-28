@@ -178,6 +178,108 @@ def create_customer() -> tuple[Response, int] | Response:
     return jsonify(response_body), 201
 
 
+@api_bp.route("/customers/remote", methods=["GET"])
+def list_remote_customers() -> tuple[Response, int]:
+    """Return customers directly from Nessie without local persistence."""
+    limit = request.args.get("limit", default=100, type=int)
+    if limit < 1 or limit > 500:
+        return _json_error("limit must be between 1 and 500.", 400)
+
+    nessie = current_app.extensions["nessie_service"]
+    try:
+        remote_customers = nessie.list_customers(limit=limit)
+    except NessieServiceError as exc:
+        return _json_error(str(exc), 502)
+
+    return jsonify({"items": remote_customers, "total": len(remote_customers)}), 200
+
+
+@api_bp.route("/customers/sync", methods=["POST"])
+def sync_remote_customers() -> tuple[Response, int]:
+    """
+    Pull customers from Nessie and upsert them into local SQLite storage.
+
+    Matching strategy:
+      1) existing `nessie_customer_id`
+      2) fallback name pair for older local rows without Nessie linkage
+    """
+    payload = request.get_json(silent=True) or {}
+    idem = _get_idempotent_response("/api/customers/sync", payload)
+    if idem:
+        return idem
+
+    limit = payload.get("limit", 100)
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        return _json_error("limit must be an integer.", 400)
+    if limit < 1 or limit > 500:
+        return _json_error("limit must be between 1 and 500.", 400)
+
+    nessie = current_app.extensions["nessie_service"]
+    try:
+        remote_customers = nessie.list_customers(limit=limit)
+    except NessieServiceError as exc:
+        return _json_error(str(exc), 502)
+
+    created = 0
+    updated = 0
+    unchanged = 0
+    synced_items: list[dict] = []
+
+    for item in remote_customers:
+        nessie_customer_id = item["nessie_customer_id"]
+        first_name = (item.get("first_name") or "").strip()
+        last_name = (item.get("last_name") or "").strip()
+        if not first_name or not last_name:
+            continue
+
+        customer = Customer.query.filter_by(nessie_customer_id=nessie_customer_id).first()
+        if not customer:
+            customer = Customer.query.filter_by(
+                first_name=first_name,
+                last_name=last_name,
+            ).first()
+
+        if not customer:
+            customer = Customer(
+                first_name=first_name,
+                last_name=last_name,
+                nessie_customer_id=nessie_customer_id,
+            )
+            db.session.add(customer)
+            db.session.flush()
+            created += 1
+        else:
+            changed = False
+            if customer.nessie_customer_id != nessie_customer_id:
+                customer.nessie_customer_id = nessie_customer_id
+                changed = True
+            if customer.first_name != first_name:
+                customer.first_name = first_name
+                changed = True
+            if customer.last_name != last_name:
+                customer.last_name = last_name
+                changed = True
+            if changed:
+                updated += 1
+            else:
+                unchanged += 1
+
+        synced_items.append(customer.to_dict())
+
+    db.session.commit()
+    response_body = {
+        "created": created,
+        "updated": updated,
+        "unchanged": unchanged,
+        "synced_count": len(synced_items),
+        "items": synced_items,
+    }
+    _store_idempotent_response("/api/customers/sync", payload, response_body, 200)
+    return jsonify(response_body), 200
+
+
 @api_bp.route("/transactions", methods=["POST"])
 def create_transaction() -> tuple[Response, int] | Response:
     """Create and score a transaction, then persist it."""

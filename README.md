@@ -167,7 +167,44 @@ Success response (`200`):
 
 Returns `404` if transaction is not found.
 
-### 4) Get Customer Baseline History (Local + Nessie)
+### 4) List Customers from Nessie (Remote Only)
+
+`GET /api/customers/remote?limit=100`
+
+Success response (`200`):
+
+```json
+{
+  "items": [],
+  "total": 0
+}
+```
+
+### 5) Sync Nessie Customers into Local DB
+
+`POST /api/customers/sync`
+
+Request body (optional):
+
+```json
+{
+  "limit": 100
+}
+```
+
+Success response (`200`):
+
+```json
+{
+  "created": 2,
+  "updated": 1,
+  "unchanged": 4,
+  "synced_count": 7,
+  "items": []
+}
+```
+
+### 6) Get Customer Baseline History (Local + Nessie)
 
 `GET /api/customers/<customer_id>/history`
 
@@ -183,7 +220,7 @@ Success response (`200`):
 }
 ```
 
-### 5) List Transactions (Pagination)
+### 7) List Transactions (Pagination)
 
 `GET /api/transactions?page=1&per_page=10`
 
@@ -234,6 +271,21 @@ curl -X POST http://127.0.0.1:5000/api/transactions \
 
 ```bash
 curl http://127.0.0.1:5000/api/fraud-score/<TRANSACTION_ID>
+```
+
+### List Nessie Customers
+
+```bash
+curl "http://127.0.0.1:5000/api/customers/remote?limit=50"
+```
+
+### Sync Nessie Customers to Local
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/customers/sync \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: sync-001" \
+  -d "{\"limit\":100}"
 ```
 
 ### Get Customer Baseline History

@@ -112,6 +112,32 @@ class NessieService:
 
         return NessieCustomerResponse(customer_id=customer_id, raw=data)
 
+    def list_customers(self, limit: int = 100) -> list[dict]:
+        """Fetch customers from Nessie and normalize shape."""
+        if self.mock_mode:
+            return []
+
+        payload = self._get("/customers")
+        customers = payload if isinstance(payload, list) else []
+        normalized: list[dict] = []
+        for customer in customers[: max(1, limit)]:
+            address = customer.get("address") or {}
+            normalized.append(
+                {
+                    "nessie_customer_id": customer.get("_id") or customer.get("id"),
+                    "first_name": customer.get("first_name", "").strip(),
+                    "last_name": customer.get("last_name", "").strip(),
+                    "address": {
+                        "street_number": address.get("street_number"),
+                        "street_name": address.get("street_name"),
+                        "city": address.get("city"),
+                        "state": address.get("state"),
+                        "zip": address.get("zip"),
+                    },
+                }
+            )
+        return [item for item in normalized if item["nessie_customer_id"]]
+
     def get_customer_history(self, nessie_customer_id: str) -> list[dict]:
         """
         Fetch and normalize purchase history from Nessie for a customer.
