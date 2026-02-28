@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="split-layout">
+    <article class="card helper-card">
+      <h2>Simulate Fraud Scenario</h2>
+      <p>
+        Submit a transaction profile and let FraudLens calculate a risk score from
+        rule-based anomalies.
+      </p>
+      <ul class="helper-list">
+        <li>High amount vs baseline</li>
+        <li>Overnight activity (12am-4am)</li>
+        <li>Location jumps</li>
+        <li>Merchant category shifts</li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <form method="post" class="form-grid">
+        <label>
+          Customer
+          <select name="customer_id" required>
+            <option value="">Select a customer</option>
+            {% for customer in customers %}
+              <option value="{{ customer.id }}">
+                {{ customer.first_name }} {{ customer.last_name }} ({{ customer.id[:8] }})
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Amount (USD)
+          <input name="amount" type="number" step="0.01" placeholder="950.00" required />
+        </label>
+        <label>
+          Merchant
+          <input name="merchant" type="text" placeholder="Best Buy" required />
+        </label>
+        <label>
+          Location
+          <input name="location" type="text" placeholder="New York" required />
+        </label>
+        <label class="full-width">
+          Timestamp (ISO-8601)
+          <input
+            name="timestamp"
+            type="text"
+            placeholder="2026-04-04T02:14:00Z"
+            required
+          />
+        </label>
+        <button type="submit">Run Fraud Analysis</button>
+      </form>
+    </article>
+  </section>
+{% endblock %}
+

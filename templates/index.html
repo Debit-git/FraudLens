@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+  {% set metrics = namespace(total_tx=0) %}
+  {% for row in customer_rows %}
+    {% set metrics.total_tx = metrics.total_tx + row.tx_count %}
+  {% endfor %}
+
+  <section class="hero">
+    <div>
+      <h2>Fraud Detection API Demo</h2>
+      <p>
+        Track simulated transactions, score anomalies, and generate explanations.
+      </p>
+    </div>
+    <a class="btn-primary" href="{{ url_for('web.simulate') }}">Simulate Transaction</a>
+  </section>
+
+  <section class="stats-grid">
+    <article class="stat-card">
+      <h3>Total Customers</h3>
+      <p>{{ customer_rows|length }}</p>
+    </article>
+    <article class="stat-card">
+      <h3>Total Transactions</h3>
+      <p>{{ metrics.total_tx }}</p>
+    </article>
+    <article class="stat-card">
+      <h3>System Status</h3>
+      <p>Operational</p>
+    </article>
+  </section>
+
+  <section class="card">
+    <div class="section-title">
+      <h3>Customer Registry</h3>
+      <span class="muted">SQLite + Nessie-linked identities</span>
+    </div>
+    {% if customer_rows %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Local ID</th>
+              <th>Nessie ID</th>
+              <th>Transactions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in customer_rows %}
+              <tr>
+                <td>{{ row.customer.first_name }} {{ row.customer.last_name }}</td>
+                <td><code>{{ row.customer.id[:10] }}...</code></td>
+                <td><code>{{ (row.customer.nessie_customer_id or "N/A")[:16] }}</code></td>
+                <td>{{ row.tx_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h4>No customers yet</h4>
+        <p>Create one via <code>POST /api/customers</code> to begin the demo flow.</p>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}
+

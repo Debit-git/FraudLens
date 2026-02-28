@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+  <section class="card">
+    <div class="section-title">
+      <h2>Fraud Analysis Result</h2>
+      <a class="btn-secondary" href="{{ url_for('web.simulate') }}">Run Another</a>
+    </div>
+
+    <div class="score-panel">
+      <div class="score">{{ (transaction.fraud_score * 100)|round(1) }}%</div>
+      <div>
+        <div class="risk {{ transaction.risk_level|lower }}">{{ transaction.risk_level }} RISK</div>
+        <div class="meter">
+          <span style="width: {{ (transaction.fraud_score * 100)|round(1) }}%"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta-grid">
+      <div>
+        <span class="meta-label">Transaction ID</span>
+        <code>{{ transaction.id }}</code>
+      </div>
+      <div>
+        <span class="meta-label">Customer</span>
+        <p>
+          {% if customer %}
+            {{ customer.first_name }} {{ customer.last_name }}
+          {% else %}
+            Unknown
+          {% endif %}
+        </p>
+      </div>
+      <div>
+        <span class="meta-label">Merchant</span>
+        <p>{{ transaction.merchant }}</p>
+      </div>
+      <div>
+        <span class="meta-label">Location</span>
+        <p>{{ transaction.location }}</p>
+      </div>
+    </div>
+
+    <h3>Risk Factors</h3>
+    <ul class="risk-list">
+      {% for factor in risk_factors %}
+        <li>{{ factor }}</li>
+      {% endfor %}
+    </ul>
+
+    <p class="muted">
+      AI narrative is available via:
+      <code>/api/fraud-score/{{ transaction.id }}</code>
+    </p>
+  </section>
+{% endblock %}
+
