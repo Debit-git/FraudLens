@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+import random
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, Response, current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
@@ -327,6 +328,184 @@ def sync_remote_customers() -> tuple[Response, int]:
     }
     _store_idempotent_response("/api/customers/sync", payload, response_body, 200)
     return jsonify(response_body), 200
+
+
+@api_bp.route("/nessie/seed-demo-data", methods=["POST"])
+def seed_nessie_demo_data() -> tuple[Response, int] | Response:
+    """
+    Create demo customers/accounts/purchases in Nessie for testing.
+
+    Body (optional):
+      {
+        "customers": 3,
+        "purchases_per_customer": 5,
+        "create_local_links": true
+      }
+    """
+    payload = request.get_json(silent=True) or {}
+    idem = _get_idempotent_response("/api/nessie/seed-demo-data", payload)
+    if idem:
+        return idem
+
+    customers_count = payload.get("customers", 3)
+    purchases_per_customer = payload.get("purchases_per_customer", 5)
+    create_local_links = bool(payload.get("create_local_links", True))
+    try:
+        customers_count = int(customers_count)
+        purchases_per_customer = int(purchases_per_customer)
+    except (TypeError, ValueError):
+        return _json_error("customers and purchases_per_customer must be integers.", 400)
+    if customers_count < 1 or customers_count > 25:
+        return _json_error("customers must be between 1 and 25.", 400)
+    if purchases_per_customer < 1 or purchases_per_customer > 40:
+        return _json_error("purchases_per_customer must be between 1 and 40.", 400)
+
+    nessie = current_app.extensions["nessie_service"]
+    if getattr(nessie, "mock_mode", False):
+        return _json_error("Disable NESSIE_MOCK_MODE to seed live Nessie data.", 400)
+
+    first_names = [
+        "Ava",
+        "Noah",
+        "Mia",
+        "Liam",
+        "Ethan",
+        "Sophia",
+        "Aria",
+        "Mason",
+        "Isabella",
+        "Lucas",
+        "Amelia",
+        "Elijah",
+    ]
+    last_names = [
+        "Patel",
+        "Johnson",
+        "Kim",
+        "Garcia",
+        "Nguyen",
+        "Lee",
+        "Martinez",
+        "Brown",
+        "Walker",
+        "Singh",
+        "Davis",
+        "Khan",
+    ]
+    streets = [
+        "Oak St",
+        "Maple Ave",
+        "Cedar Rd",
+        "Park Blvd",
+        "Riverside Dr",
+        "Lakeview Ave",
+    ]
+    city_state_zip = [
+        ("Chicago", "IL", "60601"),
+        ("Austin", "TX", "78701"),
+        ("Seattle", "WA", "98101"),
+        ("Boston", "MA", "02108"),
+        ("Denver", "CO", "80202"),
+        ("San Jose", "CA", "95113"),
+    ]
+    merchant_profiles = [
+        ("Walmart", 25, 180),
+        ("Target", 20, 160),
+        ("Amazon", 15, 140),
+        ("Uber", 8, 45),
+        ("Shell", 18, 75),
+        ("Best Buy", 120, 650),
+        ("Apple", 80, 1200),
+        ("Costco", 40, 260),
+        ("Starbucks", 4, 28),
+        ("Netflix", 14, 24),
+    ]
+
+    seeded_customers: list[dict] = []
+    accounts_created = 0
+    purchases_created = 0
+    try:
+        for idx in range(customers_count):
+            first_name = random.choice(first_names)
+            last_name = random.choice(last_names)
+            city, state, zip_code = random.choice(city_state_zip)
+            street_number = str(random.randint(100, 9999))
+            street_name = random.choice(streets)
+            address = {
+                "street_number": street_number,
+                "street_name": street_name,
+                "city": city,
+                "state": state,
+                "zip": zip_code,
+            }
+
+            remote_customer = nessie.create_customer(
+                first_name=first_name,
+                last_name=last_name,
+                address=address,
+            )
+            seeded_customers.append(
+                {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "nessie_customer_id": remote_customer.customer_id,
+                }
+            )
+
+            account = nessie.create_account_for_customer(
+                nessie_customer_id=remote_customer.customer_id,
+                nickname=f"{first_name} {last_name} Checking",
+                balance=10000 + (idx * 1000),
+            )
+            account_id = account.get("_id")
+            accounts_created += 1
+
+            if create_local_links:
+                existing_local = Customer.query.filter_by(
+                    nessie_customer_id=remote_customer.customer_id
+                ).first()
+                if not existing_local:
+                    db.session.add(
+                        Customer(
+                            first_name=first_name,
+                            last_name=last_name,
+                            nessie_customer_id=remote_customer.customer_id,
+                        )
+                    )
+
+            # Assign each customer a stable spending profile for realistic behavior.
+            preferred_merchants = random.sample(merchant_profiles, k=min(4, len(merchant_profiles)))
+            for purchase_idx in range(purchases_per_customer):
+                days_ago = random.randint(1, 75)
+                purchase_date = (
+                    datetime.now(timezone.utc) - timedelta(days=days_ago)
+                ).date().isoformat()
+                merchant, low, high = random.choice(preferred_merchants)
+                amount = round(random.uniform(low, high), 2)
+                if account_id:
+                    nessie.create_purchase_for_account(
+                        account_id=account_id,
+                        amount=amount,
+                        description=merchant,
+                        purchase_date=purchase_date,
+                    )
+                    purchases_created += 1
+    except NessieServiceError as exc:
+        db.session.rollback()
+        return _json_error(str(exc), 502)
+
+    if create_local_links:
+        db.session.commit()
+
+    response_body = {
+        "seeded_customers": seeded_customers,
+        "customers_created": len(seeded_customers),
+        "accounts_created": accounts_created,
+        "purchases_created": purchases_created,
+        "create_local_links": create_local_links,
+    }
+    _store_idempotent_response("/api/nessie/seed-demo-data", payload, response_body, 201)
+    return jsonify(response_body), 201
 
 
 @api_bp.route("/transactions", methods=["POST"])

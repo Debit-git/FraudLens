@@ -68,7 +68,25 @@ class NessieService:
         except requests.RequestException as exc:
             raise NessieServiceError(f"Failed Nessie request {path}: {exc}") from exc
 
-    def create_customer(self, first_name: str, last_name: str) -> NessieCustomerResponse:
+    def _post(self, path: str, payload: dict) -> dict:
+        """Execute a POST call against Nessie and return JSON payload."""
+        self._ensure_configured()
+        url = f"{self.base_url}{path}"
+        separator = "&" if "?" in path else "?"
+        url = f"{url}{separator}key={self.api_key}"
+        try:
+            response = requests.post(url, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as exc:
+            raise NessieServiceError(f"Failed Nessie request {path}: {exc}") from exc
+
+    def create_customer(
+        self,
+        first_name: str,
+        last_name: str,
+        address: dict | None = None,
+    ) -> NessieCustomerResponse:
         """Create a customer in Nessie and return the created remote identifier."""
         if self.mock_mode:
             fake_id = f"mock-{uuid.uuid4().hex[:16]}"
@@ -86,17 +104,18 @@ class NessieService:
 
         self._ensure_configured()
         url = f"{self.base_url}/customers?key={self.api_key}"
+        resolved_address = address or {
+            "street_number": "1",
+            "street_name": "Main St",
+            "city": "Chicago",
+            "state": "IL",
+            "zip": "60601",
+        }
         payload = {
             "first_name": first_name,
             "last_name": last_name,
             # Nessie customer creation requires an address object.
-            "address": {
-                "street_number": "1",
-                "street_name": "Main St",
-                "city": "Chicago",
-                "state": "IL",
-                "zip": "60601",
-            },
+            "address": resolved_address,
         }
         try:
             response = requests.post(url, json=payload, timeout=self.timeout)
@@ -212,4 +231,55 @@ class NessieService:
 
         history.sort(key=lambda item: item["timestamp"])
         return history
+
+    def create_account_for_customer(
+        self,
+        nessie_customer_id: str,
+        account_type: str = "Checking",
+        nickname: str = "FraudLens Checking",
+        rewards: int = 0,
+        balance: int = 10000,
+    ) -> dict:
+        """Create an account for a Nessie customer and return account payload."""
+        if self.mock_mode:
+            return {"_id": f"mock-account-{uuid.uuid4().hex[:8]}"}
+
+        payload = {
+            "type": account_type,
+            "nickname": nickname,
+            "rewards": rewards,
+            "balance": balance,
+        }
+        data = self._post(f"/customers/{nessie_customer_id}/accounts", payload)
+        created = data.get("objectCreated") or data
+        if not created.get("_id"):
+            raise NessieServiceError("Nessie account creation did not return an account id.")
+        return created
+
+    def create_purchase_for_account(
+        self,
+        account_id: str,
+        amount: float,
+        description: str,
+        purchase_date: str,
+        medium: str = "balance",
+        merchant_id: str = "57cf75cea73e494d8675ec49",
+    ) -> dict:
+        """Create a purchase transaction under a Nessie account."""
+        if self.mock_mode:
+            return {"_id": f"mock-purchase-{uuid.uuid4().hex[:8]}"}
+
+        payload = {
+            "merchant_id": merchant_id,
+            "medium": medium,
+            "purchase_date": purchase_date,
+            "amount": amount,
+            "description": description,
+            "status": "completed",
+        }
+        data = self._post(f"/accounts/{account_id}/purchases", payload)
+        created = data.get("objectCreated") or data
+        if not created.get("_id"):
+            raise NessieServiceError("Nessie purchase creation did not return a purchase id.")
+        return created
 

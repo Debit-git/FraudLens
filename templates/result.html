@@ -10,9 +10,11 @@
       <div class="score">{{ (transaction.fraud_score * 100)|round(1) }}%</div>
       <div>
         <div class="risk {{ transaction.risk_level|lower }}">{{ transaction.risk_level }} RISK</div>
-        <div class="meter">
-          <span style="width: {{ (transaction.fraud_score * 100)|round(1) }}%"></span>
-        </div>
+        <progress
+          class="meter-progress"
+          max="100"
+          value="{{ (transaction.fraud_score * 100)|round(1) }}"
+        ></progress>
       </div>
     </div>
 
@@ -48,10 +50,8 @@
       {% endfor %}
     </ul>
 
-    <p class="muted">
-      AI narrative is available via:
-      <code>/api/fraud-score/{{ transaction.id }}</code>
-    </p>
+    <h3>AI Narrative</h3>
+    <p>{{ ai_explanation }}</p>
   </section>
 {% endblock %}
 

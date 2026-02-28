@@ -239,7 +239,32 @@ Success response (`200`):
 }
 ```
 
-### 6) Get Customer Baseline History (Local + Nessie)
+### 6) Seed Demo Data in Nessie
+
+`POST /api/nessie/seed-demo-data`
+
+Request body (optional):
+
+```json
+{
+  "customers": 3,
+  "purchases_per_customer": 5,
+  "create_local_links": true
+}
+```
+
+Success response (`201`):
+
+```json
+{
+  "customers_created": 3,
+  "accounts_created": 3,
+  "purchases_created": 15,
+  "seeded_customers": []
+}
+```
+
+### 7) Get Customer Baseline History (Local + Nessie)
 
 `GET /api/customers/<customer_id>/history`
 
@@ -255,7 +280,7 @@ Success response (`200`):
 }
 ```
 
-### 7) List Transactions (Pagination)
+### 8) List Transactions (Pagination)
 
 `GET /api/transactions?page=1&per_page=10`
 
@@ -321,6 +346,15 @@ curl -X POST http://127.0.0.1:5000/api/customers/sync \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: sync-001" \
   -d "{\"limit\":100}"
+```
+
+### Seed Nessie Demo Data
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/nessie/seed-demo-data \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: seed-001" \
+  -d "{\"customers\":3,\"purchases_per_customer\":5,\"create_local_links\":true}"
 ```
 
 ### Get Customer Baseline History

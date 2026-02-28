@@ -16,6 +16,7 @@ from flask import (
 
 from models import Customer, FraudCheck, Transaction, db
 from services.fraud_engine import categorize_merchant, score_transaction
+from services.gemini_service import GeminiServiceError
 from services.nessie_service import NessieServiceError
 
 web_bp = Blueprint("web", __name__)
@@ -216,7 +217,7 @@ def simulate():
         )
 
     history = (
-        Transaction.query.filter_by(customer_id=customer_id)
+        Transaction.query.filter_by(customer_id=customer.id)
         .order_by(Transaction.timestamp)
         .all()
     )
@@ -240,7 +241,7 @@ def simulate():
     )
 
     transaction = Transaction(
-        customer_id=customer_id,
+        customer_id=customer.id,
         amount=amount,
         merchant=merchant,
         merchant_category=merchant_category,
@@ -261,11 +262,26 @@ def result(transaction_id: str):
     """Display simulation output in dashboard format."""
     transaction = Transaction.query.get_or_404(transaction_id)
     customer = Customer.query.get(transaction.customer_id)
+    gemini = current_app.extensions["gemini_service"]
+    explanation_payload = {
+        "transaction": transaction.to_dict(),
+        "customer": customer.to_dict() if customer else {"id": transaction.customer_id},
+        "risk_factors": transaction.risk_factors,
+    }
+    try:
+        ai_explanation = gemini.generate_explanation(explanation_payload)
+    except GeminiServiceError:
+        ai_explanation = (
+            "AI explanation is temporarily unavailable. "
+            "Risk factors shown above are based on rule analysis."
+        )
+
     return render_template(
         "result.html",
         transaction=transaction,
         customer=customer,
         risk_factors=transaction.risk_factors,
+        ai_explanation=ai_explanation,
     )
 
 

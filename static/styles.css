@@ -306,6 +306,32 @@ th {
   background: linear-gradient(90deg, #1ba56e, #e2a31b, #d63f54);
 }
 
+.meter-progress {
+  margin-top: 0.5rem;
+  width: 100%;
+  height: 10px;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.meter-progress::-webkit-progress-bar {
+  background: #e9eef5;
+  border-radius: 999px;
+}
+
+.meter-progress::-webkit-progress-value {
+  background: linear-gradient(90deg, #1ba56e, #e2a31b, #d63f54);
+  border-radius: 999px;
+}
+
+.meter-progress::-moz-progress-bar {
+  background: linear-gradient(90deg, #1ba56e, #e2a31b, #d63f54);
+  border-radius: 999px;
+}
+
 .risk {
   width: fit-content;
   padding: 0.35rem 0.62rem;
