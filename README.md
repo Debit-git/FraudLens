@@ -395,7 +395,7 @@ Response: `200 OK`
 
 ### List Fraud Checks
 
-`GET /v1/fraud-checks?customer_id=<id>&status=completed&risk_level=HIGH&page=1&per_page=10`
+`GET /v1/fraud-checks?customer_id=<id>&status=completed&review_status=open&risk_level=HIGH&min_fraud_score=0.2&max_fraud_score=0.9&q=best&page=1&per_page=10`
 
 Response: `200 OK`
 
@@ -416,6 +416,12 @@ Response: `200 OK`
 `DELETE /v1/fraud-checks/<fraud_check_id>`
 
 Response: `204 No Content`
+
+### Health
+
+`GET /v1/health`
+
+Response: `200 OK`
 
 ## Structured Error Format
 
@@ -458,6 +464,76 @@ curl http://127.0.0.1:5000/v1/fraud-checks/<FRAUD_CHECK_ID>
 ```bash
 curl "http://127.0.0.1:5000/v1/fraud-checks?risk_level=HIGH&page=1&per_page=10"
 ```
+
+### GET /v1/health
+
+```bash
+curl http://127.0.0.1:5000/v1/health
+```
+
+## Tech Stack
+
+- Flask 3 + Blueprints for API organization
+- Flask-SQLAlchemy + SQLite for fraud-check lifecycle and idempotency state
+- Capital One Nessie API for customer and purchase-history data
+- Google Gemini API for human-readable fraud explanations
+- Flasgger-powered Swagger docs at `/docs/`
+
+## HackIllinois Requirement Mapping
+
+- Build an API with valuable action/data: **met**
+  - Creates, scores, retrieves, updates, and deletes fraud checks.
+- Queryable over HTTP on localhost: **met**
+  - App runs at `http://127.0.0.1:5000`.
+- Usable via cURL/Postman: **met**
+  - cURL examples provided for core endpoints.
+- Documentation and usage examples in README: **met**
+  - Includes quickstart, endpoint docs, examples, and errors.
+- Returns expected 2xx for valid input: **met**
+  - `200/201` and `204` are returned across successful flows.
+- Informative errors and edge-case handling: **met**
+  - Structured errors and status codes (`400/422/404/409/502`).
+- Beyond GET + stateful behavior: **met**
+  - Uses `POST`, `PATCH`, `DELETE`; stores fraud-check lifecycle state.
+- Pagination/filtering/search where appropriate: **met**
+  - `GET /v1/fraud-checks` supports page/per_page, filters, and `q` search.
+- Bonus: publicly accessible API: **pending**
+  - Deploy to Render/Railway for a public URL.
+- Bonus: hosted docs page: **partially met**
+  - Hosted locally at `/docs/`; public once deployed.
+
+## Devpost Submission Template
+
+### Project Name
+FraudLens
+
+### Elevator Pitch
+FraudLens is a Nessie-first fraud detection API that turns transaction events into explainable fraud decisions with a clean, developer-friendly interface.
+
+### What It Does
+- Accepts fraud-check creation requests via REST
+- Pulls customer history from Capital One Nessie
+- Scores fraud risk with rule-based logic
+- Generates AI explanation with Gemini
+- Exposes full fraud-check lifecycle endpoints
+
+### Why It’s Useful
+Developers can plug FraudLens into fintech workflows to get deterministic scoring plus readable explanations while keeping API behavior predictable and idempotent.
+
+### Key Endpoints
+- `POST /v1/fraud-checks`
+- `GET /v1/fraud-checks/{id}`
+- `GET /v1/fraud-checks`
+- `PATCH /v1/fraud-checks/{id}`
+- `DELETE /v1/fraud-checks/{id}`
+- `GET /api/customers/remote`
+- `GET /v1/health`
+
+### Built With
+Flask, Flask-SQLAlchemy, SQLite, Capital One Nessie API, Google Gemini API, Flasgger (Swagger).
+
+### Demo Notes
+Use `/docs/` for interactive execution, or run cURL commands from this README.
 
 ### PATCH /v1/fraud-checks/:id
 

@@ -7,6 +7,7 @@ import json
 from datetime import datetime, timezone
 
 from flask import Blueprint, Response, current_app, jsonify, request
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import BadRequest
 
@@ -347,6 +348,12 @@ def list_fraud_checks() -> tuple[Response, int]:
       - in: query
         name: max_fraud_score
         type: number
+      - in: query
+        name: review_status
+        type: string
+      - in: query
+        name: q
+        type: string
     responses:
       200:
         description: Paginated fraud checks
@@ -365,8 +372,10 @@ def list_fraud_checks() -> tuple[Response, int]:
     customer_id = request.args.get("customer_id", type=str)
     status = request.args.get("status", type=str)
     risk_level = request.args.get("risk_level", type=str)
+    review_status = request.args.get("review_status", type=str)
     min_score = request.args.get("min_fraud_score", type=float)
     max_score = request.args.get("max_fraud_score", type=float)
+    q = request.args.get("q", type=str)
 
     if customer_id:
         query = query.filter(FraudCheck.customer_id == customer_id)
@@ -374,10 +383,33 @@ def list_fraud_checks() -> tuple[Response, int]:
         query = query.filter(FraudCheck.status == status)
     if risk_level:
         query = query.filter(FraudCheck.risk_level == risk_level.upper())
+    if review_status:
+        query = query.filter(FraudCheck.review_status == review_status.lower())
+    if min_score is not None and not (0 <= min_score <= 1):
+        return _error("invalid_request", "min_fraud_score must be between 0 and 1.", 422)
+    if max_score is not None and not (0 <= max_score <= 1):
+        return _error("invalid_request", "max_fraud_score must be between 0 and 1.", 422)
+    if min_score is not None and max_score is not None and min_score > max_score:
+        return _error(
+            "invalid_request",
+            "min_fraud_score cannot be greater than max_fraud_score.",
+            422,
+        )
     if min_score is not None:
         query = query.filter(FraudCheck.fraud_score >= min_score)
     if max_score is not None:
         query = query.filter(FraudCheck.fraud_score <= max_score)
+    if q:
+        pattern = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                FraudCheck.customer_id.ilike(pattern),
+                FraudCheck.merchant.ilike(pattern),
+                FraudCheck.location.ilike(pattern),
+                FraudCheck.risk_level.ilike(pattern),
+                FraudCheck.review_status.ilike(pattern),
+            )
+        )
 
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
     return (
@@ -394,6 +426,22 @@ def list_fraud_checks() -> tuple[Response, int]:
         ),
         200,
     )
+
+
+@v1_bp.route("/health", methods=["GET"])
+def health() -> tuple[Response, int]:
+    """
+    Health probe endpoint.
+    ---
+    tags:
+      - v1-system
+    produces:
+      - application/json
+    responses:
+      200:
+        description: Service healthy
+    """
+    return jsonify({"status": "ok", "service": "fraudlens-api"}), 200
 
 
 @v1_bp.route("/fraud-checks/<fraud_check_id>", methods=["PATCH"])
