@@ -7,6 +7,12 @@ FraudLens is a production-style Flask web API and dashboard that simulates trans
 
 It is designed for a hackathon API submission with clean modular structure and REST-first endpoint design.
 
+## Live Public API
+
+- Base URL: `https://fraudlens-api.onrender.com`
+- Swagger UI: `https://fraudlens-api.onrender.com/docs/`
+- OpenAPI JSON: `https://fraudlens-api.onrender.com/openapi.json`
+
 ## 60-Second First Call
 
 1) Start the server:
@@ -37,6 +43,8 @@ You will receive a `201 Created` response with a persisted `fraud_check` resourc
 Interactive docs:
 - Swagger UI: `http://127.0.0.1:5000/docs/`
 - OpenAPI JSON: `http://127.0.0.1:5000/openapi.json`
+- Public Swagger UI: `https://fraudlens-api.onrender.com/docs/`
+- Public OpenAPI JSON: `https://fraudlens-api.onrender.com/openapi.json`
 
 ## Project Structure
 
@@ -131,7 +139,9 @@ After deployment, your public URLs will be:
 - `GET /` - list customers
 - `GET /simulate` - transaction simulation form
 - `POST /simulate` - create and score transaction from form
+- `GET /simulate/customer-profile?customer_id=<id>` - baseline profile and quick scenario presets
 - `GET /result/<transaction_id>` - display score and risk factors
+- `GET /fraud-check/<fraud_check_id>` - view stored fraud-check details and AI narrative
 
 ## API Endpoints
 
@@ -432,7 +442,14 @@ Response: `200 OK`
 
 `DELETE /v1/fraud-checks/<fraud_check_id>`
 
-Response: `204 No Content`
+Response: `200 OK`
+
+```json
+{
+  "deleted": true,
+  "fraud_check_id": "..."
+}
+```
 
 ### Health
 
@@ -511,6 +528,27 @@ curl http://127.0.0.1:5000/v1/health
 curl http://127.0.0.1:5000/v1/metrics
 ```
 
+## Public cURL Quickstart (Devpost)
+
+```bash
+curl https://fraudlens-api.onrender.com/v1/health
+```
+
+```bash
+curl "https://fraudlens-api.onrender.com/api/customers/remote?limit=5&newest_first=true"
+```
+
+```bash
+curl -X POST https://fraudlens-api.onrender.com/v1/fraud-checks \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: public-fc-001" \
+  -d "{\"customer_id\":\"<NESSIE_CUSTOMER_ID_OR_LOCAL_ID>\",\"amount\":1200,\"merchant\":\"Apple\",\"location\":\"Chicago\",\"timestamp\":\"2026-06-15T02:30:00Z\"}"
+```
+
+```bash
+curl https://fraudlens-api.onrender.com/v1/metrics
+```
+
 ## Tech Stack
 
 - Flask 3 + Blueprints for API organization
@@ -530,17 +568,17 @@ curl http://127.0.0.1:5000/v1/metrics
 - Documentation and usage examples in README: **met**
   - Includes quickstart, endpoint docs, examples, and errors.
 - Returns expected 2xx for valid input: **met**
-  - `200/201` and `204` are returned across successful flows.
+  - `200/201` are returned across successful flows.
 - Informative errors and edge-case handling: **met**
   - Structured errors and status codes (`400/422/404/409/502`).
 - Beyond GET + stateful behavior: **met**
   - Uses `POST`, `PATCH`, `DELETE`; stores fraud-check lifecycle state.
 - Pagination/filtering/search where appropriate: **met**
   - `GET /v1/fraud-checks` supports page/per_page, filters, and `q` search.
-- Bonus: publicly accessible API: **pending**
-  - Deploy to Render/Railway for a public URL.
-- Bonus: hosted docs page: **partially met**
-  - Hosted locally at `/docs/`; public once deployed.
+- Bonus: publicly accessible API: **met**
+  - Public deployment: `https://fraudlens-api.onrender.com`
+- Bonus: hosted docs page: **met**
+  - Public docs: `https://fraudlens-api.onrender.com/docs/`
 
 ## Devpost Submission Template
 
