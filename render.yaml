@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: fraudlens-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    autoDeploy: true
+    envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: NESSIE_MOCK_MODE
+        value: "false"
+      - key: NESSIE_BASE_URL
+        value: "http://api.nessieisreal.com"
+      - key: GEMINI_BASE_URL
+        value: "https://generativelanguage.googleapis.com/v1beta"
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"
+      - key: NESSIE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+

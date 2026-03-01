@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, Response, current_app, jsonify, request
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import BadRequest
 
@@ -605,6 +605,61 @@ def health() -> tuple[Response, int]:
         description: Service healthy
     """
     return jsonify({"status": "ok", "service": "fraudlens-api"}), 200
+
+
+@v1_bp.route("/metrics", methods=["GET"])
+def metrics() -> tuple[Response, int]:
+    """
+    Return fraud-check operational metrics for dashboards and demos.
+    ---
+    tags:
+      - v1-system
+    produces:
+      - application/json
+    responses:
+      200:
+        description: Metrics snapshot
+    """
+    total = FraudCheck.query.count()
+    completed = FraudCheck.query.filter_by(status="completed").count()
+    high_risk = FraudCheck.query.filter_by(risk_level="HIGH").count()
+    confirmed_fraud = FraudCheck.query.filter_by(review_status="confirmed_fraud").count()
+    open_reviews = FraudCheck.query.filter_by(review_status="open").count()
+
+    avg_score = (
+        db.session.query(func.avg(FraudCheck.fraud_score))
+        .filter(FraudCheck.fraud_score.isnot(None))
+        .scalar()
+    )
+    avg_score = round(float(avg_score or 0.0), 4)
+
+    now_utc = datetime.now(timezone.utc)
+    checks_last_24h = FraudCheck.query.filter(
+        FraudCheck.created_at >= (now_utc - timedelta(hours=24))
+    ).count()
+
+    return (
+        jsonify(
+            {
+                "totals": {
+                    "fraud_checks": total,
+                    "completed": completed,
+                    "high_risk": high_risk,
+                    "confirmed_fraud": confirmed_fraud,
+                    "open_reviews": open_reviews,
+                    "checks_last_24h": checks_last_24h,
+                },
+                "rates": {
+                    "high_risk_rate": round((high_risk / total), 4) if total else 0.0,
+                    "confirmed_fraud_rate": round((confirmed_fraud / total), 4)
+                    if total
+                    else 0.0,
+                },
+                "average_fraud_score": avg_score,
+            }
+        ),
+        200,
+    )
 
 
 @v1_bp.route("/fraud-checks/<fraud_check_id>", methods=["PATCH"])

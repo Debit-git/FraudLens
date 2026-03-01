@@ -109,6 +109,23 @@ python app.py
 
 App will start on `http://127.0.0.1:5000`.
 
+## Public Deployment (Render)
+
+This repository includes `render.yaml` so you can deploy quickly and get a public API URL.
+
+1) Push latest code to GitHub.
+2) In Render, click **New +** -> **Blueprint** and connect your repository.
+3) Render will detect `render.yaml` and create the web service.
+4) In Render service env vars, set secrets:
+   - `NESSIE_API_KEY`
+   - `GEMINI_API_KEY`
+5) Deploy and wait for the build to finish.
+
+After deployment, your public URLs will be:
+- API base: `https://<your-render-service>.onrender.com`
+- Swagger docs: `https://<your-render-service>.onrender.com/docs/`
+- OpenAPI JSON: `https://<your-render-service>.onrender.com/openapi.json`
+
 ## Dashboard Routes
 
 - `GET /` - list customers
@@ -423,6 +440,12 @@ Response: `204 No Content`
 
 Response: `200 OK`
 
+### Metrics
+
+`GET /v1/metrics`
+
+Response: `200 OK`
+
 ## Structured Error Format
 
 All v1 errors follow this body:
@@ -482,6 +505,12 @@ curl "http://127.0.0.1:5000/v1/fraud-checks?risk_level=HIGH&page=1&per_page=10"
 curl http://127.0.0.1:5000/v1/health
 ```
 
+### GET /v1/metrics
+
+```bash
+curl http://127.0.0.1:5000/v1/metrics
+```
+
 ## Tech Stack
 
 - Flask 3 + Blueprints for API organization
@@ -539,6 +568,7 @@ Developers can plug FraudLens into fintech workflows to get deterministic scorin
 - `DELETE /v1/fraud-checks/{id}`
 - `GET /api/customers/remote`
 - `GET /v1/health`
+- `GET /v1/metrics`
 
 ### Built With
 Flask, Flask-SQLAlchemy, SQLite, Capital One Nessie API, Google Gemini API, Flasgger (Swagger).
